@@ -38,7 +38,7 @@ custom:
     Fn::Join:
       - ''
       - - ${self:custom.websiteBucketName}
-        - ".s3-website"
+        - ".s3-website-"
         - ${self:provider.region}
         - ".amazonaws.com"
   BetfredAdminScreenWebsiteOriginId:
