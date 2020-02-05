@@ -11,7 +11,7 @@
 #
 # Happy Coding!
 
-service: paul2architecture
+service: PoolsAdminService
 # app and org for use with dashboard.serverless.com
 #app: your-app-name
 #org: your-org-name
@@ -19,15 +19,45 @@ service: paul2architecture
 # You can pin your service to only deploy with a specific Serverless version
 # Check out our docs for more details
 # frameworkVersion: "=X.X.X"
-
 provider:
   name: aws
   runtime: nodejs12.x
 
 # you can overwrite defaults here
-#  stage: dev
-#  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
 
+
+custom:
+  websiteBucketName: 
+    Fn::Join:
+      - ''
+      - - "poolsadminservicewebsite"
+        - ${self:provider.stage}
+  websiteBucketURL: 
+    Fn::Join:
+      - ''
+      - - ${self:custom.websiteBucketName}
+        - ".s3-website"
+        - ${self:provider.region}
+        - ".amazonaws.com"
+  BetfredAdminScreenWebsiteOriginId:
+    Fn::Join:
+      - ''
+      - - "BetfredAdminScreenWebsiteOrigin"
+        - ${self:provider.stage}
+  RootObject: index.html 
+  ErrorObject: index.html 
+  UserPool: 
+    Fn::Join:
+      - ''
+      - - ${self:provider.stage}
+        - "UserPool"
+  UserPoolClient: 
+    Fn::Join:
+      - ''
+      - - ${self:provider.stage}
+        - "UserPoolClient"
 # you can add statements to the Lambda function's IAM Role here
 #  iamRoleStatements:
 #    - Effect: "Allow"
@@ -101,32 +131,35 @@ provider:
 #      variable2: value2
 
 
+
+# This isnt really serverless under here its just cloud formation (slightly different syntax)
+# anything can go here
+# If its not supported by cloud formation check to see if there is a serverless plugin or create one!
 resources:
+# You may need mappings for setting up Route 53
   Mappings: ${file(mappings.yml)}
   Resources:
     BetfredAdminScreenWebsite:
       Type: AWS::S3::Bucket
       Properties:
-        BucketName: betfredadminscreenwebsite
+        BucketName: ${self:custom.websiteBucketName}
         AccessControl: PublicRead
         CorsConfiguration:
           CorsRules:
           - AllowedMethods:
             - GET
-            - POST
-            - PUT
             - HEAD
             AllowedOrigins:
             - "*"
             AllowedHeaders:
             - "*"
         WebsiteConfiguration:
-          ErrorDocument: index.html
-          IndexDocument: index.html
+          ErrorDocument: ${self:custom.RootObject}
+          IndexDocument: ${self:custom.ErrorObject}
     BetfredAdminScreenWebsitePolicy:
       Type: AWS::S3::BucketPolicy
       Properties:
-        Bucket: betfredadminscreenwebsite
+        Bucket: ${self:custom.websiteBucketName}
         PolicyDocument:
           Statement:
           - 
@@ -146,17 +179,17 @@ resources:
         DistributionConfig:
           Enabled: true
           HttpVersion: http2
-          DefaultRootObject: index.html
+          DefaultRootObject: ${self:custom.RootObject}
           Origins:
-            - DomainName: betfredadminscreenwebsite.s3.amazonaws.com
-              Id: BetfredAdminScreenWebsiteOrigin
+            - DomainName: ${self:custom.websiteBucketURL}
+              Id: ${self:custom.BetfredAdminScreenWebsiteOriginId}
               CustomOriginConfig:
                 HTTPPort: 80
                 OriginProtocolPolicy: http-only
           PriceClass: PriceClass_100
           DefaultCacheBehavior:
             ViewerProtocolPolicy: allow-all
-            TargetOriginId: BetfredAdminScreenWebsiteOrigin
+            TargetOriginId: ${self:custom.BetfredAdminScreenWebsiteOriginId}
             AllowedMethods:
               - GET
               - HEAD
@@ -165,3 +198,21 @@ resources:
             MinTTL: 10
             ForwardedValues:
               QueryString: true
+    CognitoUserPool:
+        Type: AWS::Cognito::UserPool
+        Properties:
+          UserPoolName: ${self:custom.UserPool}
+          UsernameAttributes:
+            - email
+          AutoVerifiedAttributes:
+            - email
+
+    CognitoUserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: ${self:custom.UserPoolClient}
+        UserPoolId:
+          Ref: CognitoUserPool
+        ExplicitAuthFlows:
+          - ADMIN_NO_SRP_AUTH
+        GenerateSecret: false
